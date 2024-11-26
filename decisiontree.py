@@ -15,9 +15,10 @@ db = client["anime_tango2"]
 df_ratings = pd.DataFrame(list(db["UserRating"].find()))
 df_anime = pd.DataFrame(list(db["Anime"].find()))
 
-# Chuẩn bị dữ liệu
+
+# Mã hóa các giá trị chuỗi thành số
 label_encoder = LabelEncoder()
-df_anime['Name_encoded'] = label_encoder.fit_transform(df_anime['Name'])  # Mã hóa tên anime
+df_anime['JapaneseLevel'] = label_encoder.fit_transform(df_anime['JapaneseLevel'])
 
 # Kết hợp thông tin xếp hạng vào dữ liệu phim
 df_merged = df_ratings.merge(df_anime, on="Anime_id")
