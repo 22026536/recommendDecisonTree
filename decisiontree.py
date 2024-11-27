@@ -8,6 +8,17 @@ from sklearn.preprocessing import LabelEncoder
 # Khởi tạo app
 app = FastAPI()
 
+from fastapi.middleware.cors import CORSMiddleware
+
+# Thêm middleware CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Cho phép tất cả origin (hoặc chỉ định cụ thể như ["https://your-frontend.com"])
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 client = MongoClient("mongodb+srv://sangvo22026526:5anG15122003@cluster0.rcd65hj.mongodb.net/web_project")
 db = client["anime_tango2"]
 
