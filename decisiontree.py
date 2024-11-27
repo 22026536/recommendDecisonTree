@@ -39,7 +39,7 @@ df_merged['Weighted_JapaneseLevel'] = df_merged['JapaneseLevel'] * 2
 
 # Thêm "Weighted_JapaneseLevel" vào tập đặc trưng
 X = df_merged[['User_id', 'Rating', 'Weighted_JapaneseLevel']]  # Đặc trưng đầu vào
-y = df_merged['Name_encoded']                                   # Nhãn đầu ra
+y = df_merged['Name']                                   # Nhãn đầu ra
 
 # Tách tập dữ liệu thành train/test
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
