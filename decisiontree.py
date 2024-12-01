@@ -1,11 +1,11 @@
 from fastapi import FastAPI, Request
-import pandas as pd
 from pymongo import MongoClient
+import pandas as pd
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
+import json
 
-# Khởi tạo app
 app = FastAPI()
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,89 +13,89 @@ from fastapi.middleware.cors import CORSMiddleware
 # Thêm middleware CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Cho phép tất cả origin (hoặc chỉ định cụ thể như ["https://your-frontend.com"])
+    allow_origins=["*"],  # Cho phép tất cả origin
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-client = MongoClient("mongodb+srv://sangvo22026526:5anG15122003@cluster0.rcd65hj.mongodb.net/web_project")
+
+client = MongoClient("mongodb+srv://sangvo22026526:5anG15122003@cluster0.rcd65hj.mongodb.net/anime_tango2")
 db = client["anime_tango2"]
 
 # Tải dữ liệu từ MongoDB
-df_ratings = pd.DataFrame(list(db["UserRating"].find()))
 df_anime = pd.DataFrame(list(db["Anime"].find()))
+df_favorites = pd.DataFrame(list(db["UserFavorites"].find()))
 
+# Chuyển dữ liệu _id thành chuỗi (nếu cần)
+df_anime['_id'] = df_anime['_id'].astype(str)
+df_anime['Anime_id'] = df_anime['Anime_id'].astype(str)
+df_favorites['_id'] = df_favorites['_id'].astype(str)
 
-# Mã hóa các giá trị chuỗi thành số
-label_encoder = LabelEncoder()
-df_anime['JapaneseLevel'] = label_encoder.fit_transform(df_anime['JapaneseLevel'])
+# Tiền xử lý dữ liệu:
 
-# Kết hợp thông tin xếp hạng vào dữ liệu phim
-df_merged = df_ratings.merge(df_anime, on="Anime_id")
+# 1. Phân loại Members vào các mốc: 0-200000, 200000-500000, và 500000+
+def categorize_members(members):
+    if members <= 200000:
+        return '0-200000'
+    elif members <= 500000:
+        return '200000-500000'
+    else:
+        return '500000+'
 
-# Tạo trọng số cho cột JapaneseLevel (ví dụ: nhân với hệ số 2)
-df_merged['Weighted_JapaneseLevel'] = df_merged['JapaneseLevel'] * 2
+df_anime['Members_Category'] = df_anime['Member'].apply(categorize_members)
 
-# Thêm "Weighted_JapaneseLevel" vào tập đặc trưng
-X = df_merged[['User_id', 'Rating', 'Weighted_JapaneseLevel']]  # Đặc trưng đầu vào
-y = df_merged['Name']                                   # Nhãn đầu ra
+# 2. Mã hóa cột JapaneseLevel
+le_japanese_level = LabelEncoder()
+df_anime['JapaneseLevel'] = le_japanese_level.fit_transform(df_anime['JanpaneseLevel'])
 
-# Tách tập dữ liệu thành train/test
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=42)
+# 3. Mã hóa Genres thành các cột riêng biệt (One-hot Encoding)
+df_anime = pd.concat([df_anime, df_anime['Genres'].apply(pd.Series)], axis=1)
+df_anime.drop('Genres', axis=1, inplace=True)
 
-# Mô hình Decision Tree
-decision_tree_model = DecisionTreeClassifier(random_state=42)
-decision_tree_model.fit(X_train, y_train)
+# 4. Chuyển các dữ liệu phân loại thành dạng số (numerical) nếu cần
+le = LabelEncoder()
+df_anime['Type'] = le.fit_transform(df_anime['Type'])
 
+# Lấy ra các thông tin Anime mà người dùng đã yêu thích từ bảng UserFavorites
+favorite_animes = df_favorites[['User_id', 'favorites']]
 
-def recommend_by_decision_tree(user_id, n):
-    """
-    Gợi ý phim sử dụng mô hình Decision Tree, trả về toàn bộ thông tin anime.
-    """
-    # Lọc dữ liệu đánh giá của người dùng
-    user_ratings = df_ratings[df_ratings['User_id'] == user_id]
-    if user_ratings.empty:
-        return {"error": "Người dùng không có đánh giá."}
-    
-    # Thêm trọng số vào dữ liệu của người dùng
-    user_data = user_ratings.merge(df_anime[['Anime_id', 'Weighted_JapaneseLevel']], on="Anime_id", how="left")
-    user_data['Weighted_JapaneseLevel'] = user_data['Weighted_JapaneseLevel'].fillna(0)
-    
-    # Dự đoán
-    predictions = decision_tree_model.predict(user_data[['User_id', 'Rating', 'Weighted_JapaneseLevel']])
-    
-    # Loại bỏ kết quả trùng lặp
-    recommended_ids = list(dict.fromkeys(predictions))  # Anime_id đã được mã hóa (Name_encoded)
-    unique_anime_ids = label_encoder.inverse_transform(recommended_ids)  # Giải mã ra Anime_id gốc
-    
-    # Lấy toàn bộ thông tin của anime
-    recommended_anime = df_anime[df_anime['Anime_id'].isin(unique_anime_ids)]
-    
-    # Giới hạn số lượng kết quả trả về
-    recommended_anime = recommended_anime.head(n)
-    
-    return recommended_anime.to_dict(orient="records")  # Trả về dưới dạng danh sách dict
+# Tạo DataFrame kết hợp các bộ phim yêu thích của người dùng
+favorite_data = df_anime[df_anime['Anime_id'].isin(favorite_animes['favorites'])]
 
+# Đặc trưng đầu vào (features) cho mô hình: Loại bỏ 'Status' và 'Producers', thêm 'Members_Category' và 'JapaneseLevel'
+features = favorite_data[['Score', 'Type', 'Members_Category', 'JapaneseLevel'] + [col for col in df_anime.columns if col not in ['_id', 'Anime_id', 'Name', 'English_Name', 'Favorites', 'Scored_By', 'Member', 'Image_URL', 'JanpaneseLevel', 'LastestEpisodeAired']]]
+target = favorite_data['Anime_id']  # Mục tiêu là gợi ý Anime_id cho người dùng
 
-# Endpoint cho /recommend2
+# Chia dữ liệu thành tập huấn luyện và kiểm tra
+X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.2, random_state=42)
+
+# Khởi tạo và huấn luyện mô hình Decision Tree
+clf = DecisionTreeClassifier(random_state=42)
+clf.fit(X_train, y_train)
+
+# Đánh giá mô hình
+accuracy = clf.score(X_test, y_test)
+print(f"Accuracy: {accuracy}")
+
+# Hàm gợi ý phim cho người dùng
 @app.post("/")
-async def deciontree(request: Request):
+async def recommend(request: Request):
     data = await request.json()
-    user_id = data.get("User_id")
-    n = data.get("n", 10)  # Số lượng gợi ý mặc định là 10
-
-    if user_id is None:
-        return {"error": "Vui lòng cung cấp user_id"}
-
-    # Gọi hàm recommend_by_decision_tree
-    result = recommend_by_decision_tree(user_id, n)
-    return {"recommendations": result}
-
-
-import uvicorn
-import os
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))  # Render sẽ cung cấp cổng trong biến PORT
-    uvicorn.run("decisiontree:app", host="0.0.0.0", port=port)
-
+    user_id = data.get("user_id")
+    n = data.get("n", 10)  # Số lượng gợi ý, mặc định là 10
+    # Lấy các bộ phim yêu thích của người dùng từ bảng UserFavorites
+    user_favorites = df_favorites[df_favorites['User_id'] == user_id]['favorites'].tolist()
+    
+    # Lọc ra các bộ phim chưa được yêu thích (để tránh gợi ý lại phim đã yêu thích)
+    potential_animes = df_anime[~df_anime['Anime_id'].isin(user_favorites)]
+    
+    # Dự đoán các phim mà người dùng có thể thích
+    features = potential_animes[['Score', 'Type', 'Members_Category', 'JapaneseLevel'] + [col for col in df_anime.columns if col not in ['_id', 'Anime_id', 'Name', 'English_Name', 'Favorites', 'Scored_By', 'Member', 'Image_URL', 'JanpaneseLevel', 'LastestEpisodeAired']]]
+    predicted = clf.predict(features)
+    
+    # Lấy các Anime_id dự đoán từ mô hình
+    recommended_animes = potential_animes[potential_animes['Anime_id'].isin(predicted)].head(n)  # Lấy top n gợi ý
+    
+    recommendations = recommended_animes[['Anime_id', 'Name', 'English_Name', 'Score', 'Genres']].to_dict(orient='records')
+    return recommendations
