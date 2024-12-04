@@ -47,7 +47,7 @@ df_anime['Members_Category'] = df_anime['Members'].apply(categorize_members)
 
 # 2. Mã hóa cột JapaneseLevel
 le_japanese_level = LabelEncoder()
-df_anime['JapaneseLevel'] = le_japanese_level.fit_transform(df_anime['JanpaneseLevel'])
+df_anime['JapaneseLevel'] = le_japanese_level.fit_transform(df_anime['JapaneseLevel'])
 
 # 3. Mã hóa Genres thành các cột riêng biệt (One-hot Encoding)
 df_anime = pd.concat([df_anime, df_anime['Genres'].apply(pd.Series)], axis=1)
@@ -64,7 +64,7 @@ favorite_animes = df_favorites[['User_id', 'favorites']]
 favorite_data = df_anime[df_anime['Anime_id'].isin(favorite_animes['favorites'])]
 
 # Đặc trưng đầu vào (features) cho mô hình: Loại bỏ 'Status' và 'Producers', thêm 'Members_Category' và 'JapaneseLevel'
-features = favorite_data[['Score', 'Type', 'Members_Category', 'JapaneseLevel'] + [col for col in df_anime.columns if col not in ['_id', 'Anime_id', 'Name', 'English_Name', 'Favorites', 'Scored_By', 'Member', 'Image_URL', 'JanpaneseLevel', 'LastestEpisodeAired']]]
+features = favorite_data[['Score', 'Type', 'Members_Category', 'JapaneseLevel'] + [col for col in df_anime.columns if col not in ['_id', 'Anime_id', 'Name', 'English_Name', 'Favorites', 'Scored_By', 'Member', 'Image_URL', 'JapaneseLevel', 'LastestEpisodeAired']]]
 target = favorite_data['Anime_id']  # Mục tiêu là gợi ý Anime_id cho người dùng
 
 # Chia dữ liệu thành tập huấn luyện và kiểm tra
@@ -91,7 +91,7 @@ async def recommend(request: Request):
     potential_animes = df_anime[~df_anime['Anime_id'].isin(user_favorites)]
     
     # Dự đoán các phim mà người dùng có thể thích
-    features = potential_animes[['Score', 'Type', 'Members_Category', 'JapaneseLevel'] + [col for col in df_anime.columns if col not in ['_id', 'Anime_id', 'Name', 'English_Name', 'Favorites', 'Scored_By', 'Member', 'Image_URL', 'JanpaneseLevel', 'LastestEpisodeAired']]]
+    features = potential_animes[['Score', 'Type', 'Members_Category', 'JapaneseLevel'] + [col for col in df_anime.columns if col not in ['_id', 'Anime_id', 'Name', 'English_Name', 'Favorites', 'Scored_By', 'Member', 'Image_URL', 'JapaneseLevel', 'LastestEpisodeAired']]]
     predicted = clf.predict(features)
     
     # Lấy các Anime_id dự đoán từ mô hình
