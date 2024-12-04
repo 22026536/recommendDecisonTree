@@ -43,7 +43,7 @@ def categorize_members(members):
     else:
         return '500000+'
 
-df_anime['Members_Category'] = df_anime['Member'].apply(categorize_members)
+df_anime['Members_Category'] = df_anime['Members'].apply(categorize_members)
 
 # 2. Mã hóa cột JapaneseLevel
 le_japanese_level = LabelEncoder()
