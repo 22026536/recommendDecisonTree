@@ -67,16 +67,20 @@ favorite_data = df_anime[df_anime['Anime_id'].isin(favorite_animes['favorites'])
 features = favorite_data[['Score', 'Type', 'Members_Category', 'JapaneseLevel'] + [col for col in df_anime.columns if col not in ['_id', 'Anime_id', 'Name', 'English_Name', 'Favorites', 'Scored_By', 'Member', 'Image_URL', 'JapaneseLevel', 'LastestEpisodeAired']]]
 target = favorite_data['Anime_id']  # Mục tiêu là gợi ý Anime_id cho người dùng
 
-# Chia dữ liệu thành tập huấn luyện và kiểm tra
-X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.2, random_state=42)
+# Giả sử features và target đã được chuẩn bị
+X_train = features  # Toàn bộ dữ liệu đặc trưng
+y_train = target    # Toàn bộ nhãn mục tiêu
 
 # Khởi tạo và huấn luyện mô hình Decision Tree
 clf = DecisionTreeClassifier(random_state=42)
 clf.fit(X_train, y_train)
 
-# Đánh giá mô hình
-accuracy = clf.score(X_test, y_test)
-print(f"Accuracy: {accuracy}")
+# (Tuỳ chọn) Dự đoán trên chính tập huấn luyện
+y_pred = clf.predict(X_train)
+
+# (Tuỳ chọn) Kiểm tra độ chính xác trên tập huấn luyện
+from sklearn.metrics import accuracy_score
+print("Độ chính xác trên tập huấn luyện:", accuracy_score(y_train, y_pred))
 
 # Hàm gợi ý phim cho người dùng
 @app.post("/")
