@@ -71,6 +71,9 @@ target = favorite_data['Anime_id']  # Mục tiêu là gợi ý Anime_id cho ngư
 X_train = features  # Toàn bộ dữ liệu đặc trưng
 y_train = target    # Toàn bộ nhãn mục tiêu
 
+# Đảm bảo tất cả các tên cột trong X_train đều là chuỗi
+X_train.columns = X_train.columns.astype(str)
+
 # Khởi tạo và huấn luyện mô hình Decision Tree
 clf = DecisionTreeClassifier(random_state=42)
 clf.fit(X_train, y_train)
