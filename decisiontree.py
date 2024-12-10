@@ -20,7 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Kết nối đến MongoDB
+# Kết nối đến MongoDB.
 client = MongoClient('mongodb+srv://sangvo22026526:5anG15122003@cluster0.rcd65hj.mongodb.net/anime_tango2')  # Sử dụng URL kết nối MongoDB của bạn
 db = client['anime_tango2']  # Tên cơ sở dữ liệu của bạn
 anime_collection = db['Anime']
