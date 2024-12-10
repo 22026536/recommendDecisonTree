@@ -134,7 +134,7 @@ def train_decision_tree(user_id):
 
     return clf
 
-@app.route('/', methods=['POST'])
+@app.post('/')
 async def recommend_anime(request: Request):
     data = await request.json()
     user_id = str(data.get("user_id"))
