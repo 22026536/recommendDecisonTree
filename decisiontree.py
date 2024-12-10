@@ -39,7 +39,8 @@ def get_user_ratings(user_id):
 # Lấy dữ liệu Anime
 anime_df = get_anime_data()
 anime_df2 = anime_df
-
+user_ratings = get_user_ratings(19)
+user_ratings_df = pd.DataFrame(user_ratings)
 # Cập nhật để phân loại cột 'Score' theo các điều kiện
 def categorize_score(score):
     if score < 8:
@@ -100,6 +101,7 @@ anime_df['AgeCategory'] = anime_df['Old'].apply(categorize_age)
 def get_user_features(user_id):
     user_ratings = get_user_ratings(user_id)
     user_ratings_df = pd.DataFrame(user_ratings)
+    print(user_ratings_df.head(5))
     user_anime_df = anime_df[anime_df['Anime_id'].isin(user_ratings_df['Anime_id'])]
     features = {}
 
@@ -132,7 +134,7 @@ def train_decision_tree(user_id):
 @app.post('/')
 async def recommend_anime(request: Request):
     data = await request.json()
-    user_id = str(data.get("user_id"))
+    user_id = data.get("user_id")
     n = data.get("n", 10)  # Số lượng gợi ý, mặc định là 10
     clf = train_decision_tree(user_id)
     anime_features = anime_df[genres + ['Favorites_', 'JapaneseLevel_', 'AgeCategory', 'Score_']]
@@ -147,7 +149,7 @@ async def recommend_anime(request: Request):
 
     recommended_anime = recommended_anime.head(n)[['Anime_id', 'Name','English name','Score', 'Genres', 'Synopsis','Type','Episodes','Duration', 'Favorites','Scored By','Members','Image URL','Old', 'JapaneseLevel']]
 
-    return recommend_anime
+    return {"recommended_anime": recommended_anime.to_dict(orient="records")}
 
 import uvicorn
 import os
