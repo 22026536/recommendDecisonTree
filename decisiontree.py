@@ -1,108 +1,112 @@
-from fastapi import FastAPI, Request
+from flask import Flask, request, jsonify
 from pymongo import MongoClient
 import pandas as pd
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
-import json
-
-app = FastAPI()
-
-from fastapi.middleware.cors import CORSMiddleware
-
-# Thêm middleware CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Cho phép tất cả origin
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-client = MongoClient("mongodb+srv://sangvo22026526:5anG15122003@cluster0.rcd65hj.mongodb.net/anime_tango2")
-db = client["anime_tango2"]
-
-# Tải dữ liệu từ MongoDB
-df_anime = pd.DataFrame(list(db["Anime"].find()))
-df_favorites = pd.DataFrame(list(db["UserFavorites"].find()))
-
-# Chuyển dữ liệu _id thành chuỗi (nếu cần)
-df_anime['_id'] = df_anime['_id'].astype(str)
-df_anime['Anime_id'] = df_anime['Anime_id'].astype(str)
-df_favorites['_id'] = df_favorites['_id'].astype(str)
-
-# Tiền xử lý dữ liệu:
-
-# 1. Phân loại Members vào các mốc: 0-200000, 200000-500000, và 500000+
-def categorize_members(members):
-    if members <= 200000:
-        return '0-200000'
-    elif members <= 500000:
-        return '200000-500000'
-    else:
-        return '500000+'
-
-df_anime['Members_Category'] = df_anime['Members'].apply(categorize_members)
-
-# 2. Mã hóa cột JapaneseLevel
-le_japanese_level = LabelEncoder()
-df_anime['JapaneseLevel'] = le_japanese_level.fit_transform(df_anime['JapaneseLevel'])
-
-# 3. Mã hóa Genres thành các cột riêng biệt (One-hot Encoding)
-df_anime = pd.concat([df_anime, df_anime['Genres'].apply(pd.Series)], axis=1)
-df_anime.drop('Genres', axis=1, inplace=True)
-
-# 4. Chuyển các dữ liệu phân loại thành dạng số (numerical) nếu cần
-le = LabelEncoder()
-df_anime['Type'] = le.fit_transform(df_anime['Type'])
-
-# Lấy ra các thông tin Anime mà người dùng đã yêu thích từ bảng UserFavorites
-favorite_animes = df_favorites[['User_id', 'favorites']]
-
-# Tạo DataFrame kết hợp các bộ phim yêu thích của người dùng
-favorite_data = df_anime[df_anime['Anime_id'].isin(favorite_animes['favorites'])]
-
-# Đặc trưng đầu vào (features) cho mô hình: Loại bỏ 'Status' và 'Producers', thêm 'Members_Category' và 'JapaneseLevel'
-features = favorite_data[['Score', 'Type', 'Members_Category', 'JapaneseLevel'] + [col for col in df_anime.columns if col not in ['_id', 'Anime_id', 'Name', 'English_Name', 'Favorites', 'Scored_By', 'Member', 'Image_URL', 'JapaneseLevel', 'LastestEpisodeAired']]]
-target = favorite_data['Anime_id']  # Mục tiêu là gợi ý Anime_id cho người dùng
-
-# Giả sử features và target đã được chuẩn bị
-X_train = features  # Toàn bộ dữ liệu đặc trưng
-y_train = target    # Toàn bộ nhãn mục tiêu
-
-# Đảm bảo tất cả các tên cột trong X_train đều là chuỗi
-X_train.columns = X_train.columns.astype(str)
-
-# Khởi tạo và huấn luyện mô hình Decision Tree
-clf = DecisionTreeClassifier(random_state=42)
-clf.fit(X_train, y_train)
-
-# (Tuỳ chọn) Dự đoán trên chính tập huấn luyện
-y_pred = clf.predict(X_train)
-
-# (Tuỳ chọn) Kiểm tra độ chính xác trên tập huấn luyện
 from sklearn.metrics import accuracy_score
-print("Độ chính xác trên tập huấn luyện:", accuracy_score(y_train, y_pred))
+import numpy as np
 
-# Hàm gợi ý phim cho người dùng
-@app.post("/")
-async def recommend(request: Request):
-    data = await request.json()
-    user_id = data.get("user_id")
-    n = data.get("n", 10)  # Số lượng gợi ý, mặc định là 10
-    # Lấy các bộ phim yêu thích của người dùng từ bảng UserFavorites
-    user_favorites = df_favorites[df_favorites['User_id'] == user_id]['favorites'].tolist()
-    
-    # Lọc ra các bộ phim chưa được yêu thích (để tránh gợi ý lại phim đã yêu thích)
-    potential_animes = df_anime[~df_anime['Anime_id'].isin(user_favorites)]
-    
-    # Dự đoán các phim mà người dùng có thể thích
-    features = potential_animes[['Score', 'Type', 'Members_Category', 'JapaneseLevel'] + [col for col in df_anime.columns if col not in ['_id', 'Anime_id', 'Name', 'English_Name', 'Favorites', 'Scored_By', 'Member', 'Image_URL', 'JapaneseLevel', 'LastestEpisodeAired']]]
-    predicted = clf.predict(features)
-    
-    # Lấy các Anime_id dự đoán từ mô hình
-    recommended_animes = potential_animes[potential_animes['Anime_id'].isin(predicted)].head(n)  # Lấy top n gợi ý
-    
-    recommendations = recommended_animes[['Anime_id', 'Name', 'English_Name', 'Score', 'Genres']].to_dict(orient='records')
-    return recommendations
+# Kết nối MongoDB
+client = MongoClient('mongodb+srv://sangvo22026526:5anG15122003@cluster0.rcd65hj.mongodb.net/anime_tango2')
+db = client['anime_tango2']
+anime_collection = db['Anime']
+user_rating_collection = db['UserRating']
+
+# Flask app
+app = Flask(__name__)
+
+# Hàm lấy dữ liệu Anime
+def get_anime_data():
+    anime_data = list(anime_collection.find())
+    return pd.DataFrame(anime_data)
+
+# Hàm lấy dữ liệu UserRatings
+def get_user_ratings(user_id):
+    user_ratings = list(user_rating_collection.find({'User_id': user_id}))
+    return user_ratings
+
+# Xử lý dữ liệu Anime
+anime_df = get_anime_data()
+anime_df2 = anime_df.copy()
+
+# Thêm các cột xử lý
+def categorize_score(score):
+    if score < 8:
+        return 0
+    elif 8 <= score <= 9:
+        return 1
+    else:
+        return 2
+
+anime_df['Score_'] = anime_df['Score'].apply(categorize_score)
+genres = ['Action', 'Adventure', 'Comedy', 'Drama', 'Romance']  # Cập nhật danh sách Genres
+for genre in genres:
+    anime_df[genre] = anime_df['Genres'].apply(lambda x: 1 if genre in x else 0)
+
+anime_df['Favorites_'] = anime_df['Favorites'].apply(lambda x: 0 if x <= 5000 else (1 if x <= 20000 else 2))
+anime_df['JapaneseLevel_'] = anime_df['JapaneseLevel'].apply(lambda x: 0 if x in ['N4', 'N5'] else (1 if x in ['N2', 'N3'] else 2))
+anime_df['AgeCategory'] = anime_df['Old'].apply(lambda x: 1 if '13+' in x else 0)
+
+# Tạo đặc trưng người dùng
+def get_user_features(user_id):
+    user_ratings = get_user_ratings(user_id)
+    user_ratings_df = pd.DataFrame(user_ratings)
+    user_anime_df = anime_df[anime_df['Anime_id'].isin(user_ratings_df['Anime_id'])]
+
+    features = {}
+    features['Avg_Old'] = user_anime_df['AgeCategory'].mean()
+    features['Avg_Favorites'] = user_anime_df['Favorites_'].mean()
+    features['Avg_JapaneseLevel'] = user_anime_df['JapaneseLevel_'].mean()
+    features['Avg_Score'] = user_anime_df['Score_'].mean()
+    for genre in genres:
+        features[f'Avg_{genre}'] = user_anime_df[genre].mean()
+
+    return features
+
+# Huấn luyện mô hình Decision Tree
+def train_decision_tree(user_id):
+    user_features = get_user_features(user_id)
+    anime_features = anime_df[genres + ['Favorites_', 'JapaneseLevel_', 'AgeCategory', 'Score_']]
+    user_feature_vector = np.array([user_features[f'Avg_{genre}'] for genre in genres] +
+                                   [user_features['Avg_Favorites'], user_features['Avg_JapaneseLevel'],
+                                    user_features['Avg_Old'], user_features['Avg_Score']])
+
+    X = anime_features
+    y = anime_df['Score_']
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+    clf = DecisionTreeClassifier(random_state=42)
+    clf.fit(X_train, y_train)
+    return clf
+
+# Gợi ý Anime
+def recommend_anime_using_tree(user_id, n):
+    clf = train_decision_tree(user_id)
+    anime_features = anime_df[genres + ['Favorites_', 'JapaneseLevel_', 'AgeCategory', 'Score_']]
+    predictions = clf.predict(anime_features)
+
+    recommended_anime_indices = np.where(predictions >= 1)[0]
+    recommended_anime = anime_df2.iloc[recommended_anime_indices]
+
+    user_ratings = get_user_ratings(user_id)
+    rated_anime_ids = [rating['Anime_id'] for rating in user_ratings]
+    recommended_anime = recommended_anime[~recommended_anime['Anime_id'].isin(rated_anime_ids)]
+    recommended_anime = recommended_anime.head(n)[['Anime_id', 'Name', 'Score', 'Genres']]
+
+    return recommended_anime
+
+# API endpoint
+@app.route('/api/recommend', methods=['POST'])
+def recommend():
+    data = request.json
+    user_id = data.get('user_id')
+    n = data.get('n', 5)
+
+    if not user_id:
+        return jsonify({'error': 'user_id is required'}), 400
+
+    recommended_anime = recommend_anime_using_tree(user_id, n)
+    return jsonify(recommended_anime.to_dict(orient='records'))
+
+if __name__ == '__main__':
+    app.run(debug=True)
