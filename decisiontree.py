@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Cho phép tất cả origin
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -122,14 +123,9 @@ def train_decision_tree(user_id):
 
     X = anime_features
     y = anime_df['Score_']
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
 
     clf = DecisionTreeClassifier(random_state=42)
-    clf.fit(X_train, y_train)
-
-    y_pred = clf.predict(X_test)
-    accuracy = accuracy_score(y_test, y_pred)
-    print(f'Accuracy: {accuracy}')
+    clf.fit(X, y)
 
     return clf
 
